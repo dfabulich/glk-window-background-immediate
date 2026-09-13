@@ -1,0 +1,380 @@
+! glk_window_set_background_color_immediate probe — bare Glulx Inform 6 (no library).
+
+! Inform 6 limits identifiers to 32 chars, so wrappers use shorter names.
+Constant gestalt_WinBgImmediate = $1120; ! gestalt_WindowBackgroundImmediate
+
+Constant zcolor_Default = -1;
+
+Constant COLOR_BLACK = $000000;
+Constant COLOR_WHITE = $ffffff;
+Constant COLOR_GREEN = $008000;
+Constant COLOR_PINK  = $ff8888;
+
+Constant wintype_TextBuffer = 3;
+Constant wintype_TextGrid = 4;
+
+Constant winmethod_Above = $02;
+Constant winmethod_Fixed = $10;
+
+Constant style_Normal = 0;
+Constant style_Header = 3;
+Constant style_Input = 8;
+Constant stylehint_TextColor = 7;
+Constant stylehint_BackColor = 8;
+Constant stylehint_ReverseColor = 9;
+
+Constant evtype_LineInput = 3;
+Constant evtype_Arrange = 5;
+
+Constant ROOM_DEFAULT = 0;
+Constant ROOM_PINK = 1;
+
+Global mainwin;
+Global statuswin;
+Global location;
+Global has_bg_immediate;
+Global status_is_pink;
+
+Array event --> 4;
+Array gg_arguments --> 2;
+Array line_buffer -> 80;
+
+Array cmd_east buffer "east";
+Array cmd_e buffer "e";
+Array cmd_west buffer "west";
+Array cmd_w buffer "w";
+Array cmd_restart buffer "restart";
+Array cmd_quit buffer "quit";
+Array cmd_q buffer "q";
+
+! --- Glk entry points -------------------------------------------------------
+
+[ glk_exit;
+	glk($0001);
+];
+
+[ glk_gestalt sel val;
+	return glk($0004, sel, val);
+];
+
+[ glk_window_open split method size wintype rock;
+	return glk($0023, split, method, size, wintype, rock);
+];
+
+[ glk_window_close win;
+	glk($0024, win, 0);
+];
+
+[ glk_window_clear win;
+	glk($002A, win);
+];
+
+[ glk_window_move_cursor win xpos ypos;
+	glk($002B, win, xpos, ypos);
+];
+
+! Library-style vararg wrapper so out-params work (width in gg_arguments-->0).
+[ glk_window_get_size _vararg_count;
+	@glk $25 _vararg_count 0;
+];
+
+[ glk_set_window win;
+	glk($002F, win);
+];
+
+[ glk_stylehint_set wintype styl hint val;
+	glk($00B0, wintype, styl, hint, val);
+];
+
+[ glk_stylehint_clear wintype styl hint;
+	glk($00B1, wintype, styl, hint);
+];
+
+[ glk_set_style styl;
+	glk($0086, styl);
+];
+
+[ glk_select ev;
+	glk($00C0, ev);
+];
+
+[ glk_request_line_event win buf maxlen initlen;
+	glk($00D0, win, buf, maxlen, initlen);
+];
+
+! glk_window_set_background_color_immediate ($1120)
+[ glk_win_set_bg_now win color;
+	glk($1120, win, color);
+];
+
+! --- Helpers ----------------------------------------------------------------
+
+! Case-folded match of the completed line against a buffer-array command word.
+[ LineMatches cmd   i len ch1 ch2 cmdbytes;
+	len = event-->2;
+	if (len ~= cmd-->0) rfalse;
+	cmdbytes = cmd + 4;
+	for (i = 0 : i < len : i++) {
+		ch1 = line_buffer->i;
+		if (ch1 >= 'A' && ch1 <= 'Z') ch1 = ch1 + 32;
+		ch2 = cmdbytes->i;
+		if (ch2 >= 'A' && ch2 <= 'Z') ch2 = ch2 + 32;
+		if (ch1 ~= ch2) rfalse;
+	}
+	rtrue;
+];
+
+! Bake main-buffer Normal/Header/Input colours into stylehints (create-time only).
+! Header and Input must match Normal's black-on-pink: Gargoyle paints each
+! style's BackColor behind runs, so unhinted styles keep the theme white background.
+[ ApplyBufferStylehints;
+	if (location == ROOM_PINK) {
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_PINK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_PINK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_PINK);
+	} else {
+		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_BackColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_BackColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_BackColor);
+	}
+];
+
+[ OpenStatus;
+	if (location == ROOM_PINK) {
+		glk_stylehint_set(wintype_TextGrid, style_Normal, stylehint_ReverseColor, 0);
+		glk_stylehint_set(wintype_TextGrid, style_Normal, stylehint_TextColor, COLOR_WHITE);
+		glk_stylehint_set(wintype_TextGrid, style_Normal, stylehint_BackColor, COLOR_GREEN);
+	} else {
+		glk_stylehint_clear(wintype_TextGrid, style_Normal, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextGrid, style_Normal, stylehint_BackColor);
+		glk_stylehint_set(wintype_TextGrid, style_Normal, stylehint_ReverseColor, 1);
+	}
+	statuswin = glk_window_open(mainwin, winmethod_Above + winmethod_Fixed, 1,
+		wintype_TextGrid, 0);
+	status_is_pink = (location == ROOM_PINK);
+];
+
+! Fallback path: close the window tree and reopen with stylehints for the
+! current location. (This looks indistinguishable from clearing the window.)
+[ RebuildWindows;
+	if (statuswin) {
+		glk_window_close(statuswin);
+		statuswin = 0;
+	}
+	if (mainwin) {
+		glk_window_close(mainwin);
+		mainwin = 0;
+	}
+	ApplyBufferStylehints();
+	mainwin = glk_window_open(0, 0, 0, wintype_TextBuffer, 0);
+	OpenStatus();
+	glk_set_window(mainwin);
+];
+
+! Close and reopen the status grid so create-time stylehints match location
+! (Pink: white on green; Default: reverse video).
+[ ReopenStatus;
+	if (statuswin) {
+		glk_window_close(statuswin);
+		statuswin = 0;
+	}
+	OpenStatus();
+	glk_set_window(mainwin);
+];
+
+! Redraw the status grid for the current location, then restore mainwin.
+! Fill the entire row with spaces under the baked colours so the bar is
+! solid (clear alone can leave theme-coloured padding).
+[ DrawStatus   width i want_pink;
+	want_pink = (location == ROOM_PINK);
+	if (~~statuswin || status_is_pink ~= want_pink)
+		ReopenStatus();
+	if (~~statuswin) rtrue;
+	glk_set_window(statuswin);
+	glk_window_clear(statuswin);
+	glk_window_get_size(statuswin, gg_arguments, 0);
+	width = gg_arguments-->0;
+	glk_window_move_cursor(statuswin, 0, 0);
+	for (i = 0 : i < width : i++)
+		print " ";
+	glk_window_move_cursor(statuswin, 0, 0);
+	if (location == ROOM_PINK)
+		print " Pink Room";
+	else
+		print " Default Room";
+	glk_set_window(mainwin);
+];
+
+[ SetDefaultBackground;
+	if (has_bg_immediate) {
+		glk_win_set_bg_now(mainwin, zcolor_Default);
+		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_BackColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_BackColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_TextColor);
+		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_BackColor);
+		! Status cannot change live colours without reopen; restore reverse video.
+		ReopenStatus();
+	} else {
+		RebuildWindows();
+	}
+];
+
+[ EnterPinkRoom;
+	if (has_bg_immediate) {
+		glk_win_set_bg_now(mainwin, COLOR_PINK);
+		! Persist after later clear/arrange (stylehints do not update live text).
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_PINK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_PINK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_PINK);
+		! Reopen status with white-on-green stylehints (main transcript kept).
+		ReopenStatus();
+	} else {
+		RebuildWindows();
+	}
+];
+
+[ Look;
+	DrawStatus();
+	if (location == ROOM_PINK) {
+		glk_set_style(style_Header);
+		print "Pink Room^";
+		glk_set_style(style_Normal);
+		print "You are in the Pink Room. The pane should be pink";
+		if (has_bg_immediate) {
+			print ". Prior text (including the move-east line) should still be visible";
+		} else {
+			print ", with black foreground text";
+		}
+		print ". The status line should be white on green. An exit leads west back ";
+		print "to the Default Room.^";
+	} else {
+		glk_set_style(style_Header);
+		print "Default Room^";
+		glk_set_style(style_Normal);
+		print "You are in the Default Room. The pane background should match ";
+		print "the interpreter default. An exit leads east to the Pink Room.^";
+	}
+];
+
+[ PrintPrompt;
+	new_line;
+	print "Commands: east/e, west/w, restart, quit.^";
+	print "> ";
+];
+
+[ PrintGestaltStatus;
+	print "gestalt_WindowBackgroundImmediate => ", has_bg_immediate, "^";
+	if (has_bg_immediate)
+		print "(Using immediate background; transcript preserved.)^";
+	else
+		print "(No WindowBackgroundImmediate; falling back to close/reopen + stylehints.)^";
+];
+
+[ Main
+	done;
+
+	@setiosys 2 0; ! select Glk I/O system
+
+	mainwin = glk_window_open(0, 0, 0, wintype_TextBuffer, 0);
+	glk_set_window(mainwin);
+
+	has_bg_immediate = glk_gestalt(gestalt_WinBgImmediate, 0);
+	location = ROOM_DEFAULT;
+	OpenStatus();
+	glk_set_window(mainwin);
+
+	PrintGestaltStatus();
+	new_line;
+
+	while (1) {
+		! StartGame
+		location = ROOM_DEFAULT;
+		SetDefaultBackground();
+		DrawStatus();
+		glk_set_style(style_Header);
+		if (has_bg_immediate)
+			print "Bgcolor Test (immediate API)^";
+		else
+			print "Bgcolor Test (fallback: close/reopen windows)^";
+		glk_set_style(style_Normal);
+		if (has_bg_immediate) {
+			print "Exercises glk_window_set_background_color_immediate.^";
+			print "^You start in the Default Room. Go east into the Pink Room ";
+			print "(pink background, transcript preserved), then west to restore default colors.^";
+		} else {
+			print "Falls back to closing and reopening windows on room change.^";
+			print "^You start in the Default Room. Go east into the Pink Room ";
+			print "(pink background; transcript discarded), then west to restore defaults.^";
+		}
+		print "^The status line shows the room name: reverse video here, white on green ";
+		print "in the Pink Room.^";
+		new_line;
+		Look();
+
+		! CommandLoop: returns 1 = quit, 2 = restart.
+		! Line requests stay active across Arrange/Redraw; only re-request after a
+		! completed line event (re-requesting while one is pending triggers
+		! "window already has keyboard request").
+		done = 0;
+		PrintPrompt();
+		glk_request_line_event(mainwin, line_buffer, 80, 0);
+		while (~~done) {
+			glk_select(event);
+			if (event-->0 == evtype_Arrange) {
+				DrawStatus();
+				continue;
+			}
+			if (event-->0 ~= evtype_LineInput) continue;
+			new_line;
+			if (LineMatches(cmd_quit) || LineMatches(cmd_q)) {
+				done = 1;
+			} else if (LineMatches(cmd_restart)) {
+				done = 2;
+			} else if (LineMatches(cmd_east) || LineMatches(cmd_e)) {
+				if (location == ROOM_PINK) {
+					print "You can't go that way.^";
+				} else {
+					! Print before the palette change: survives with _immediate,
+					! discarded by close/reopen on the fallback path.
+					print "You move east.^";
+					location = ROOM_PINK;
+					EnterPinkRoom();
+					Look();
+				}
+				PrintPrompt();
+				glk_request_line_event(mainwin, line_buffer, 80, 0);
+			} else if (LineMatches(cmd_west) || LineMatches(cmd_w)) {
+				if (location == ROOM_DEFAULT) {
+					print "You can't go that way.^";
+				} else {
+					! Same as east: visible only when the transcript is preserved.
+					print "You move west.^";
+					location = ROOM_DEFAULT;
+					SetDefaultBackground();
+					Look();
+				}
+				PrintPrompt();
+				glk_request_line_event(mainwin, line_buffer, 80, 0);
+			} else {
+				print "I only understand: east/e, west/w, restart, quit.^";
+				PrintPrompt();
+				glk_request_line_event(mainwin, line_buffer, 80, 0);
+			}
+		}
+		if (done == 1) break; ! quit
+		! restart: clear for a clean re-run, then the loop resets colours/room
+		glk_window_clear(mainwin);
+		PrintGestaltStatus();
+		new_line;
+	}
+	glk_exit();
+];

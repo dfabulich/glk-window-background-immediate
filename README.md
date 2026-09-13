@@ -1,0 +1,1 @@
+A simple test of the proposed [`glk_window_set_background_color_immediate`](https://intfiction.org/t/changing-the-open-window-background-color-in-glk/82023) Glk extension.
