@@ -3,8 +3,6 @@
 ! Inform 6 limits identifiers to 32 chars, so wrappers use shorter names.
 Constant gestalt_WinBgImmediate = $1120; ! gestalt_WindowBackgroundImmediate
 
-Constant zcolor_Default = -1;
-
 Constant COLOR_BLACK = $000000;
 Constant COLOR_WHITE = $ffffff;
 Constant COLOR_GREEN = $008000;
@@ -26,7 +24,7 @@ Constant stylehint_ReverseColor = 9;
 Constant evtype_LineInput = 3;
 Constant evtype_Arrange = 5;
 
-Constant ROOM_DEFAULT = 0;
+Constant ROOM_WHITE = 0;
 Constant ROOM_PINK = 1;
 
 Global mainwin;
@@ -125,8 +123,8 @@ Array cmd_q buffer "q";
 ];
 
 ! Bake main-buffer Normal/Header/Input colours into stylehints (create-time only).
-! Header and Input must match Normal's black-on-pink: Gargoyle paints each
-! style's BackColor behind runs, so unhinted styles keep the theme white background.
+! Header and Input must match Normal: Gargoyle paints each style's BackColor
+! behind runs, so unhinted styles keep the theme default background.
 [ ApplyBufferStylehints;
 	if (location == ROOM_PINK) {
 		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
@@ -136,12 +134,12 @@ Array cmd_q buffer "q";
 		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
 		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_PINK);
 	} else {
-		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_TextColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_BackColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_TextColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_BackColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_TextColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_BackColor);
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_WHITE);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_WHITE);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_WHITE);
 	}
 ];
 
@@ -178,7 +176,7 @@ Array cmd_q buffer "q";
 ];
 
 ! Close and reopen the status grid so create-time stylehints match location
-! (Pink: white on green; Default: reverse video).
+! (Pink: white on green; White Room: reverse video).
 [ ReopenStatus;
 	if (statuswin) {
 		glk_window_close(statuswin);
@@ -207,18 +205,20 @@ Array cmd_q buffer "q";
 	if (location == ROOM_PINK)
 		print " Pink Room";
 	else
-		print " Default Room";
+		print " White Room";
 	glk_set_window(mainwin);
 ];
 
-[ SetDefaultBackground;
+[ EnterWhiteRoom;
 	if (has_bg_immediate) {
-		glk_win_set_bg_now(mainwin, zcolor_Default);
-		glk_stylehint_clear(wintype_TextBuffer, style_Normal, stylehint_BackColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_TextColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Header, stylehint_BackColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_TextColor);
-		glk_stylehint_clear(wintype_TextBuffer, style_Input, stylehint_BackColor);
+		glk_win_set_bg_now(mainwin, COLOR_WHITE);
+		! Persist after later clear/arrange (stylehints do not update live text).
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_WHITE);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_WHITE);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
+		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_WHITE);
 		! Status cannot change live colours without reopen; restore reverse video.
 		ReopenStatus();
 	} else {
@@ -230,6 +230,7 @@ Array cmd_q buffer "q";
 	if (has_bg_immediate) {
 		glk_win_set_bg_now(mainwin, COLOR_PINK);
 		! Persist after later clear/arrange (stylehints do not update live text).
+		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
 		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_PINK);
 		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
 		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_PINK);
@@ -255,13 +256,13 @@ Array cmd_q buffer "q";
 			print ", with black foreground text";
 		}
 		print ". The status line should be white on green. An exit leads west back ";
-		print "to the Default Room.^";
+		print "to the White Room.^";
 	} else {
 		glk_set_style(style_Header);
-		print "Default Room^";
+		print "White Room^";
 		glk_set_style(style_Normal);
-		print "You are in the Default Room. The pane background should match ";
-		print "the interpreter default. An exit leads east to the Pink Room.^";
+		print "You are in the White Room. The pane should be white, with black ";
+		print "foreground text. An exit leads east to the Pink Room.^";
 	}
 ];
 
@@ -288,7 +289,7 @@ Array cmd_q buffer "q";
 	glk_set_window(mainwin);
 
 	has_bg_immediate = glk_gestalt(gestalt_WinBgImmediate, 0);
-	location = ROOM_DEFAULT;
+	location = ROOM_WHITE;
 	OpenStatus();
 	glk_set_window(mainwin);
 
@@ -297,8 +298,8 @@ Array cmd_q buffer "q";
 
 	while (1) {
 		! StartGame
-		location = ROOM_DEFAULT;
-		SetDefaultBackground();
+		location = ROOM_WHITE;
+		EnterWhiteRoom();
 		DrawStatus();
 		glk_set_style(style_Header);
 		if (has_bg_immediate)
@@ -308,12 +309,12 @@ Array cmd_q buffer "q";
 		glk_set_style(style_Normal);
 		if (has_bg_immediate) {
 			print "Exercises glk_window_set_background_color_immediate.^";
-			print "^You start in the Default Room. Go east into the Pink Room ";
-			print "(pink background, transcript preserved), then west to restore default colors.^";
+			print "^You start in the White Room. Go east into the Pink Room ";
+			print "(pink background, transcript preserved), then west to restore white.^";
 		} else {
 			print "Falls back to closing and reopening windows on room change.^";
-			print "^You start in the Default Room. Go east into the Pink Room ";
-			print "(pink background; transcript discarded), then west to restore defaults.^";
+			print "^You start in the White Room. Go east into the Pink Room ";
+			print "(pink background; transcript discarded), then west to restore white.^";
 		}
 		print "^The status line shows the room name: reverse video here, white on green ";
 		print "in the Pink Room.^";
@@ -353,13 +354,13 @@ Array cmd_q buffer "q";
 				PrintPrompt();
 				glk_request_line_event(mainwin, line_buffer, 80, 0);
 			} else if (LineMatches(cmd_west) || LineMatches(cmd_w)) {
-				if (location == ROOM_DEFAULT) {
+				if (location == ROOM_WHITE) {
 					print "You can't go that way.^";
 				} else {
 					! Same as east: visible only when the transcript is preserved.
 					print "You move west.^";
-					location = ROOM_DEFAULT;
-					SetDefaultBackground();
+					location = ROOM_WHITE;
+					EnterWhiteRoom();
 					Look();
 				}
 				PrintPrompt();
