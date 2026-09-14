@@ -122,25 +122,14 @@ Array cmd_q buffer "q";
 	rtrue;
 ];
 
-! Bake main-buffer Normal/Header/Input colours into stylehints (create-time only).
-! Header and Input must match Normal: Gargoyle paints each style's BackColor
-! behind runs, so unhinted styles keep the theme default background.
 [ ApplyBufferStylehints;
-	if (location == ROOM_PINK) {
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+	glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+	glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
+	glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
+	if (location == ROOM_PINK)
 		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_PINK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_PINK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_PINK);
-	} else {
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
+	else
 		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_WHITE);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_WHITE);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_WHITE);
-	}
 ];
 
 [ OpenStatus;
@@ -212,14 +201,6 @@ Array cmd_q buffer "q";
 [ EnterWhiteRoom;
 	if (has_bg_immediate) {
 		glk_win_set_bg_now(mainwin, COLOR_WHITE);
-		! Persist after later clear/arrange (stylehints do not update live text).
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_WHITE);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_WHITE);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_WHITE);
-		! Status cannot change live colours without reopen; restore reverse video.
 		ReopenStatus();
 	} else {
 		RebuildWindows();
@@ -229,14 +210,6 @@ Array cmd_q buffer "q";
 [ EnterPinkRoom;
 	if (has_bg_immediate) {
 		glk_win_set_bg_now(mainwin, COLOR_PINK);
-		! Persist after later clear/arrange (stylehints do not update live text).
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Normal, stylehint_BackColor, COLOR_PINK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Header, stylehint_BackColor, COLOR_PINK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_TextColor, COLOR_BLACK);
-		glk_stylehint_set(wintype_TextBuffer, style_Input, stylehint_BackColor, COLOR_PINK);
-		! Reopen status with white-on-green stylehints (main transcript kept).
 		ReopenStatus();
 	} else {
 		RebuildWindows();
@@ -285,11 +258,13 @@ Array cmd_q buffer "q";
 
 	@setiosys 2 0; ! select Glk I/O system
 
+	! Stylehints only apply to windows opened after they are set.
+	location = ROOM_WHITE;
+	ApplyBufferStylehints();
 	mainwin = glk_window_open(0, 0, 0, wintype_TextBuffer, 0);
 	glk_set_window(mainwin);
 
 	has_bg_immediate = glk_gestalt(gestalt_WinBgImmediate, 0);
-	location = ROOM_WHITE;
 	OpenStatus();
 	glk_set_window(mainwin);
 
